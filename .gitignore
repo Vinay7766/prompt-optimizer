@@ -14,6 +14,11 @@ dist-ssr
 target/
 src-tauri/target/
 
+# Local Project Specifications (keep local, do not push to public repo)
+PRD.md
+ARCHITECTURE.md
+TASKS.md
+
 *.local
 .env
 .env.*
