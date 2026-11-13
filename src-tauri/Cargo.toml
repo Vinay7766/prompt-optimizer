@@ -1,6 +1,6 @@
 [package]
 name = "prompt-optimizer"
-version = "0.2.0"
+version = "0.2.1"
 description = "Universal AI Token Saver & Clarifier"
 authors = ["Prompt Optimizer Team"]
 edition = "2021"
