@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Zap, Sparkles, Settings, ShieldCheck, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { Zap, Sparkles, Settings, ShieldCheck, Check, Keyboard, Terminal } from "lucide-react";
 import {
   compressPrompt,
   sharpenPrompt,
@@ -10,7 +11,6 @@ import {
   SharpenResult,
 } from "./services/tauriBridge";
 import { loadStoredSettings, saveStoredSettings } from "./services/configStorage";
-import { FloatingPill } from "./components/FloatingPill";
 import { PreviewHUD } from "./components/PreviewHUD";
 import { SettingsModal } from "./components/SettingsModal";
 
@@ -25,8 +25,7 @@ export default function App() {
   const [sharpenResult, setSharpenResult] = useState<SharpenResult | null>(null);
   const [activeMode, setActiveMode] = useState<"compress" | "sharpen">("compress");
 
-  // Floating Pill & HUD Toggle State
-  const [showPill, setShowPill] = useState(true);
+  // HUD Active State
   const [hudActive, setHudActive] = useState(false);
 
   // Settings State - Loaded from Disk (localStorage) on startup
@@ -64,6 +63,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Compression error:", err);
+      alert(`Compression error: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -73,11 +73,11 @@ export default function App() {
     if (!text.trim()) return;
     setLoading(true);
     try {
-      const storedKey = engine !== "ollama" ? await loadApiKey(engine) : undefined;
+      const storedKey = engine !== "ollama" ? await loadApiKey(engine) : "";
       
       if (engine !== "ollama" && (!storedKey || !storedKey.trim())) {
         alert(
-          `No ${engine.toUpperCase()} API key found in your local vault.\n\nPlease open the Settings tab to enter your key, or select "Local Ollama" for 100% free offline AI.`
+          `No ${engine.toUpperCase()} API key found in your local vault.\n\nPlease open Settings to enter your key, or select "Local Ollama" for 100% free offline AI.`
         );
         setActiveTab("settings");
         setLoading(false);
@@ -107,30 +107,34 @@ export default function App() {
     }
   };
 
-  // OS Active Selection Capture & Run
-  const handleCaptureAndCompress = async () => {
-    try {
-      const text = await captureSelection();
-      setInputText(text);
-      await runCompressOnText(text);
-    } catch (e) {
-      console.log("No active text selection, using workspace input:", e);
-      if (inputText.trim()) {
-        await runCompressOnText(inputText);
+  // Global Background Shortcut Listener (Ctrl+Shift+O)
+  useEffect(() => {
+    const unlistenPromise = listen<string>("global-selection-captured", async (event) => {
+      const captured = event.payload;
+      if (captured && captured.trim()) {
+        setInputText(captured);
+        if (activeMode === "compress") {
+          await runCompressOnText(captured);
+        } else {
+          await runSharpenOnText(captured);
+        }
       }
-    }
-  };
+    });
 
-  const handleCaptureAndSharpen = async () => {
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [activeMode, instantReplace, engine, modelName, ollamaUrl]);
+
+  // UI Selection Capture Button Handlers
+  const handleCaptureActiveSelection = async () => {
     try {
-      const text = await captureSelection();
-      setInputText(text);
-      await runSharpenOnText(text);
-    } catch (e) {
-      console.log("No active text selection, using workspace input:", e);
-      if (inputText.trim()) {
-        await runSharpenOnText(inputText);
-      }
+      const sel = await captureSelection();
+      setInputText(sel);
+    } catch {
+      alert(
+        "No active text selection found in current window.\n\nTip: Highlight text in another application and press Ctrl+Shift+O, or paste text directly into this workspace."
+      );
     }
   };
 
@@ -163,8 +167,6 @@ export default function App() {
     }
   };
 
-
-
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-text">
       {/* Top Header */}
@@ -183,7 +185,7 @@ export default function App() {
         <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700/60 text-xs">
           <button
             onClick={() => setActiveTab("workspace")}
-            className={`px-3 py-1.5 rounded-md transition ${
+            className={`px-3 py-1.5 rounded-md transition cursor-pointer ${
               activeTab === "workspace"
                 ? "bg-cyan-600 text-white font-medium shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
@@ -193,7 +195,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setActiveTab("settings")}
-            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1 transition ${
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1 transition cursor-pointer ${
               activeTab === "settings"
                 ? "bg-slate-700 text-white font-medium"
                 : "text-slate-400 hover:text-slate-200"
@@ -210,35 +212,60 @@ export default function App() {
       <div className="flex-1 p-5 max-w-5xl w-full mx-auto flex flex-col gap-4">
         {activeTab === "workspace" ? (
           <>
-            {/* Interactive Floating Pill Demonstration */}
-            {showPill && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-slate-800/80">
-                <span className="text-xs text-slate-400">
-                  Floating Toolbar Preview (Appears near text selection across any app):
-                </span>
-                <FloatingPill
-                  onCompress={handleCaptureAndCompress}
-                  onSharpen={handleCaptureAndSharpen}
-                  onDismiss={() => setShowPill(false)}
-                  loading={loading}
-                />
+            {/* System-Wide OS Hotkey Bar */}
+            <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 shadow-sm gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-indigo-500/15 border border-indigo-500/25 text-indigo-400">
+                  <Keyboard className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-200">System-Wide Hotkey:</span>
+                    <kbd className="px-2 py-0.5 rounded bg-slate-800 text-cyan-400 text-[11px] font-mono border border-slate-700 shadow-inner">
+                      Ctrl + Shift + O
+                    </kbd>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Highlight text in any external application (Chrome, IDE, Notepad) and press hotkey.
+                  </p>
+                </div>
               </div>
-            )}
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Terminal className="w-3 h-3 text-slate-500" />
+                  Mode:
+                </span>
+                <button
+                  onClick={() => setActiveMode("compress")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                    activeMode === "compress"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Compress (Offline)
+                </button>
+                <button
+                  onClick={() => setActiveMode("sharpen")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                    activeMode === "sharpen"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Sharpen ({engine.toUpperCase()})
+                </button>
+              </div>
+            </div>
 
             {/* Input Box */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                <span>Enter text directly or highlight text in any app:</span>
+                <span>Enter text directly or capture from active window:</span>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={async () => {
-                      try {
-                        const sel = await captureSelection();
-                        setInputText(sel);
-                      } catch {
-                        alert("No active text selection found in current window.");
-                      }
-                    }}
+                    onClick={handleCaptureActiveSelection}
                     className="hover:text-cyan-400 underline transition cursor-pointer"
                   >
                     Capture Active Selection
@@ -262,7 +289,7 @@ export default function App() {
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Paste code snippets, error traces, or casual prompts here..."
+                placeholder="Paste code snippets, error traces, or casual prompts here, or highlight text anywhere in Windows..."
                 className="w-full h-36 bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 resize-none transition shadow-inner"
               />
             </div>
