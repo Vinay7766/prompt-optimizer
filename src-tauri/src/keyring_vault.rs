@@ -9,7 +9,11 @@ pub fn store_api_key(provider: &str, api_key: &str) -> Result<(), String> {
 
 pub fn get_api_key(provider: &str) -> Result<String, String> {
     let entry = Entry::new(SERVICE_NAME, provider).map_err(|e| e.to_string())?;
-    entry.get_password().map_err(|e| e.to_string())
+    match entry.get_password() {
+        Ok(pw) => Ok(pw),
+        Err(keyring::Error::NoEntry) => Ok(String::new()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 pub fn delete_api_key(provider: &str) -> Result<(), String> {
