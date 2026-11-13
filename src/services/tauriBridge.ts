@@ -41,6 +41,14 @@ export async function setClipboard(text: string): Promise<void> {
   await invoke("set_clipboard", { text });
 }
 
+export async function captureSelection(): Promise<string> {
+  return await invoke<string>("capture_selection");
+}
+
+export async function replaceSelection(text: string): Promise<void> {
+  await invoke("replace_selection", { text });
+}
+
 export async function saveApiKey(provider: string, key: string): Promise<void> {
   await invoke("save_key", { provider, key });
 }

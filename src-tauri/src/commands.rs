@@ -24,6 +24,16 @@ pub fn set_clipboard(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn capture_selection() -> Result<String, String> {
+    clipboard::capture_selected_text()
+}
+
+#[tauri::command]
+pub fn replace_selection(text: String) -> Result<(), String> {
+    clipboard::replace_selected_text(&text)
+}
+
+#[tauri::command]
 pub fn save_key(provider: String, key: String) -> Result<(), String> {
     keyring_vault::store_api_key(&provider, &key)
 }

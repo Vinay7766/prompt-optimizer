@@ -15,6 +15,8 @@ pub fn run() {
             commands::sharpen_prompt_cmd,
             commands::get_clipboard,
             commands::set_clipboard,
+            commands::capture_selection,
+            commands::replace_selection,
             commands::save_key,
             commands::load_key
         ])
