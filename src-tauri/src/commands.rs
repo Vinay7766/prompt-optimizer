@@ -24,8 +24,8 @@ pub fn set_clipboard(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn capture_selection() -> Result<String, String> {
-    clipboard::capture_selected_text()
+pub fn capture_selection(app: tauri::AppHandle) -> Result<String, String> {
+    clipboard::capture_selected_text(&app)
 }
 
 #[tauri::command]

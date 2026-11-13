@@ -1,6 +1,7 @@
 use arboard::Clipboard;
 use std::thread;
 use std::time::Duration;
+use tauri::{AppHandle, Manager};
 
 #[cfg(target_os = "windows")]
 #[allow(non_snake_case)]
@@ -49,7 +50,7 @@ mod windows_input {
     pub fn send_copy_keystroke() {
         send_key_event(VK_CONTROL, false);
         send_key_event(VK_C, false);
-        thread::sleep(Duration::from_millis(15));
+        thread::sleep(Duration::from_millis(25));
         send_key_event(VK_C, true);
         send_key_event(VK_CONTROL, true);
     }
@@ -57,7 +58,7 @@ mod windows_input {
     pub fn send_paste_keystroke() {
         send_key_event(VK_CONTROL, false);
         send_key_event(VK_V, false);
-        thread::sleep(Duration::from_millis(15));
+        thread::sleep(Duration::from_millis(25));
         send_key_event(VK_V, true);
         send_key_event(VK_CONTROL, true);
     }
@@ -73,28 +74,38 @@ pub fn set_clipboard_text(text: &str) -> Result<(), String> {
     clipboard.set_text(text.to_string()).map_err(|e| format!("Clipboard write error: {}", e))
 }
 
-/// Captures selected text from the currently active application
-pub fn capture_selected_text() -> Result<String, String> {
-    // 1. Save existing clipboard content
+/// Captures selected text from the currently active background application:
+/// 1. Saves clipboard
+/// 2. Briefly yields window focus to the active target app
+/// 3. Emulates synthetic Ctrl+C
+/// 4. Reads selected text and restores window focus
+pub fn capture_selected_text(app: &AppHandle) -> Result<String, String> {
     let original_clipboard = get_clipboard_text().unwrap_or_default();
 
-    // 2. Clear clipboard temporarily
-    let _ = set_clipboard_text("");
+    // 1. If clipboard already contains text from a user copy, read it
+    // 2. Otherwise trigger synthetic copy from focused app
+    if let Some(window) = app.get_webview_window("main") {
+        // Temporarily minimize/hide to yield OS focus to the user's active window (browser, IDE, etc.)
+        let _ = window.hide();
+        thread::sleep(Duration::from_millis(150));
 
-    // 3. Send synthetic Ctrl+C
-    #[cfg(target_os = "windows")]
-    windows_input::send_copy_keystroke();
+        #[cfg(target_os = "windows")]
+        windows_input::send_copy_keystroke();
 
-    // Small delay to allow the active app to copy
-    thread::sleep(Duration::from_millis(80));
+        thread::sleep(Duration::from_millis(120));
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        #[cfg(target_os = "windows")]
+        windows_input::send_copy_keystroke();
+        thread::sleep(Duration::from_millis(100));
+    }
 
-    // 4. Read copied text
     let selected_text = get_clipboard_text().unwrap_or_default();
 
-    // 5. If nothing was selected, restore original clipboard
     if selected_text.is_empty() {
         let _ = set_clipboard_text(&original_clipboard);
-        return Err("No text selected in active window".to_string());
+        return Err("No active text selection found in current window".to_string());
     }
 
     Ok(selected_text)
@@ -102,10 +113,8 @@ pub fn capture_selected_text() -> Result<String, String> {
 
 /// Replaces the currently selected text in the active application
 pub fn replace_selected_text(new_text: &str) -> Result<(), String> {
-    // 1. Put optimized text into clipboard
     set_clipboard_text(new_text)?;
 
-    // 2. Send synthetic Ctrl+V
     #[cfg(target_os = "windows")]
     windows_input::send_paste_keystroke();
 
