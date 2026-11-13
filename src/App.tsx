@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { Zap, Sparkles, Settings, ShieldCheck, Check, CornerDownLeft } from "lucide-react";
+import { Zap, Sparkles, Settings, ShieldCheck, Check } from "lucide-react";
 import {
   compressPrompt,
   sharpenPrompt,
   captureSelection,
   replaceSelection,
-  saveApiKey,
   loadApiKey,
   OptimizationResult,
   SharpenResult,
 } from "./services/tauriBridge";
 import { FloatingPill } from "./components/FloatingPill";
 import { PreviewHUD } from "./components/PreviewHUD";
+import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
   const [inputText, setInputText] = useState("");
@@ -30,11 +30,9 @@ export default function App() {
 
   // Settings State
   const [engine, setEngine] = useState<"ollama" | "openai" | "gemini" | "claude" | "grok">("gemini");
-  const [apiKey, setApiKey] = useState("");
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [modelName, setModelName] = useState("");
   const [instantReplace, setInstantReplace] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Execution Handlers
   const runCompressOnText = async (text: string) => {
@@ -62,11 +60,12 @@ export default function App() {
     if (!text.trim()) return;
     setLoading(true);
     try {
+      const storedKey = engine !== "ollama" ? await loadApiKey(engine) : undefined;
       const res = await sharpenPrompt({
         prompt: text,
         engine,
         model_name: modelName || undefined,
-        api_key: apiKey || undefined,
+        api_key: storedKey || undefined,
         ollama_url: ollamaUrl || undefined,
       });
       setSharpenResult(res);
@@ -141,26 +140,7 @@ export default function App() {
     }
   };
 
-  const handleSaveSettings = async () => {
-    try {
-      if (apiKey) {
-        await saveApiKey(engine, apiKey);
-      }
-      setSettingsSaved(true);
-      setTimeout(() => setSettingsSaved(false), 2000);
-    } catch (e) {
-      alert(`Failed to save key: ${e}`);
-    }
-  };
 
-  const handleLoadKey = async (selectedEngine: string) => {
-    try {
-      const key = await loadApiKey(selectedEngine);
-      setApiKey(key || "");
-    } catch {
-      setApiKey("");
-    }
-  };
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-text">
@@ -335,110 +315,16 @@ export default function App() {
           </>
         ) : (
           /* Settings View */
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col gap-5 shadow-xl max-w-2xl mx-auto w-full">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-cyan-400" />
-                Preferences & Engine Configuration
-              </h2>
-              <span className="text-xs text-slate-400">Keys stored in OS Keychain</span>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              {/* Replace Behavior Toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div>
-                  <span className="text-xs font-semibold text-slate-200 block">
-                    Instant In-Place Replacement
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Directly overwrite selected text without displaying the Preview HUD.
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={instantReplace}
-                  onChange={(e) => setInstantReplace(e.target.checked)}
-                  className="w-4 h-4 accent-cyan-500 cursor-pointer"
-                />
-              </div>
-
-              {/* Engine Selector */}
-              <div>
-                <label className="text-xs font-medium text-slate-300 block mb-1.5">
-                  Default AI Engine for Prompt Sharpening
-                </label>
-                <select
-                  value={engine}
-                  onChange={(e) => {
-                    const selected = e.target.value as any;
-                    setEngine(selected);
-                    handleLoadKey(selected);
-                  }}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
-                >
-                  <option value="gemini">Google Gemini (Gemini 2.5 Flash)</option>
-                  <option value="openai">OpenAI (GPT-4o-mini)</option>
-                  <option value="claude">Anthropic Claude (Claude 3.5 Haiku)</option>
-                  <option value="grok">xAI Grok (Grok-2-mini)</option>
-                  <option value="ollama">Local Ollama (localhost:11434)</option>
-                </select>
-              </div>
-
-              {engine === "ollama" ? (
-                <>
-                  <div>
-                    <label className="text-xs font-medium text-slate-300 block mb-1.5">
-                      Ollama Server URL
-                    </label>
-                    <input
-                      type="text"
-                      value={ollamaUrl}
-                      onChange={(e) => setOllamaUrl(e.target.value)}
-                      placeholder="http://localhost:11434"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-300 block mb-1.5">
-                      Ollama Model Name
-                    </label>
-                    <input
-                      type="text"
-                      value={modelName}
-                      onChange={(e) => setModelName(e.target.value)}
-                      placeholder="llama3.2"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="text-xs font-medium text-slate-300 block mb-1.5">
-                    {engine.toUpperCase()} API Key (BYOK)
-                  </label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`Enter your ${engine} API key...`}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Direct-to-provider only. Never sent to any intermediary server.
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveSettings}
-                className="mt-2 w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-cyan-600/20"
-              >
-                {settingsSaved ? <Check className="w-4 h-4 text-white" /> : <CornerDownLeft className="w-4 h-4" />}
-                {settingsSaved ? "Preferences Saved!" : "Save Engine Preferences"}
-              </button>
-            </div>
-          </div>
+          <SettingsModal
+            engine={engine}
+            setEngine={setEngine}
+            ollamaUrl={ollamaUrl}
+            setOllamaUrl={setOllamaUrl}
+            modelName={modelName}
+            setModelName={setModelName}
+            instantReplace={instantReplace}
+            setInstantReplace={setInstantReplace}
+          />
         )}
       </div>
 
