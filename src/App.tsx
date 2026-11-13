@@ -61,6 +61,16 @@ export default function App() {
     setLoading(true);
     try {
       const storedKey = engine !== "ollama" ? await loadApiKey(engine) : undefined;
+      
+      if (engine !== "ollama" && (!storedKey || !storedKey.trim())) {
+        alert(
+          `No ${engine.toUpperCase()} API key found in your local vault.\n\nPlease open the Settings tab to enter your key, or select "Local Ollama" for 100% free offline AI.`
+        );
+        setActiveTab("settings");
+        setLoading(false);
+        return;
+      }
+
       const res = await sharpenPrompt({
         prompt: text,
         engine,
