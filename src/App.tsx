@@ -9,13 +9,14 @@ import {
   OptimizationResult,
   SharpenResult,
 } from "./services/tauriBridge";
+import { loadStoredSettings, saveStoredSettings } from "./services/configStorage";
 import { FloatingPill } from "./components/FloatingPill";
 import { PreviewHUD } from "./components/PreviewHUD";
 import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
   const [inputText, setInputText] = useState("");
-  const [activeTab, setActiveTab] = useState<"workspace" | "hud_preview" | "settings">("workspace");
+  const [activeTab, setActiveTab] = useState<"workspace" | "settings">("workspace");
   const [loading, setLoading] = useState(false);
   const [copiedNotification, setCopiedNotification] = useState(false);
 
@@ -28,11 +29,23 @@ export default function App() {
   const [showPill, setShowPill] = useState(true);
   const [hudActive, setHudActive] = useState(false);
 
-  // Settings State
-  const [engine, setEngine] = useState<"ollama" | "openai" | "gemini" | "claude" | "grok">("gemini");
-  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
-  const [modelName, setModelName] = useState("");
-  const [instantReplace, setInstantReplace] = useState(false);
+  // Settings State - Loaded from Disk (localStorage) on startup
+  const initialSettings = loadStoredSettings();
+  const [engine, setEngine] = useState<"ollama" | "openai" | "gemini" | "claude" | "grok">(initialSettings.engine);
+  const [ollamaUrl, setOllamaUrl] = useState(initialSettings.ollamaUrl);
+  const [modelName, setModelName] = useState(initialSettings.modelName);
+  const [instantReplace, setInstantReplaceState] = useState(initialSettings.instantReplace);
+
+  // Helper to update instant replace and immediately persist
+  const setInstantReplace = (val: boolean) => {
+    setInstantReplaceState(val);
+    saveStoredSettings({
+      engine,
+      ollamaUrl,
+      modelName,
+      instantReplace: val,
+    });
+  };
 
   // Execution Handlers
   const runCompressOnText = async (text: string) => {

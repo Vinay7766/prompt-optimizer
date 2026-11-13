@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Settings, ShieldCheck, Check, CornerDownLeft, Lock, Server } from "lucide-react";
 import { saveApiKey, loadApiKey } from "../services/tauriBridge";
+import { saveStoredSettings } from "../services/configStorage";
 
 interface SettingsModalProps {
   engine: "ollama" | "openai" | "gemini" | "claude" | "grok";
@@ -49,10 +50,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = async () => {
     try {
+      // 1. Persist preferences to disk via configStorage
+      saveStoredSettings({
+        engine,
+        ollamaUrl,
+        modelName,
+        instantReplace,
+      });
+
+      // 2. Persist credentials to OS Keychain
       if (engine !== "ollama" && apiKey.trim()) {
         await saveApiKey(engine, apiKey.trim());
       }
-      setStatusMessage("Preferences & Credentials saved securely!");
+      setStatusMessage("Preferences & Credentials saved to disk!");
       setTimeout(() => setStatusMessage(null), 2500);
     } catch (err) {
       setStatusMessage(`Error saving: ${err}`);
